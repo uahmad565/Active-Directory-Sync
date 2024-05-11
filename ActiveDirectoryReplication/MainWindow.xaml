@@ -1,0 +1,61 @@
+﻿<Window x:Class="ActiveDirectoryReplication.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ActiveDirectoryReplication"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="750" Width="600" Name="Window_Main" Loaded="Window_Main_Loaded">
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="2*"/>
+
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="2*" />
+            <RowDefinition Height="1*" />
+            <RowDefinition Height="1*" />
+            <RowDefinition Height="1*" />
+            <RowDefinition Height="1*" />
+            <RowDefinition Height="4*" />
+            <RowDefinition Height="6*" />
+            <RowDefinition Height="1*" />
+            <RowDefinition Height="0.5*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.ColumnSpan="4" FontSize="30" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center">
+            Active Directory Sync
+        </TextBlock>
+
+        <Label Grid.Column="0" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" >Domain Name:</Label>
+        <TextBox x:Name="Txt_Domain" Grid.Column="1" Grid.Row="1" Height="30" Padding="6" TextChanged="TxtDomainChanged"></TextBox>
+
+        <Label Grid.Column="2" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center">Port:</Label>
+        <TextBox x:Name="Txt_Port" PreviewTextInput="NumberValidationTextBox" Grid.Column="3" Grid.Row="1" VerticalAlignment="Center" Height="30" Padding="6"/>
+
+        <Label Grid.Column="0" Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Center" >Username:</Label>
+        <TextBox x:Name="Txt_Username" Grid.Column="1" Grid.Row="2" Height="30" Padding="6"></TextBox>
+
+        <Label Grid.Column="2" Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Center" >Password:</Label>
+        <PasswordBox x:Name="Txt_Password" Grid.Column="3" Grid.Row="2" Height="30" Padding="6"/>
+
+        <Label Grid.Column="0" Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Center">Interval (seconds):</Label>
+        <TextBox x:Name="Txt_Interval" PreviewTextInput="NumberValidationTextBox" Grid.Column="1" Grid.Row="3" VerticalAlignment="Center" Height="30" Padding="6"/>
+
+        <Button Name="Btn_TestConnection" Content="Test Connection" Grid.Column="0" Grid.Row="4" Click="OnTestConnectionClick" Height="30" Width="100" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+
+        <WrapPanel Grid.Column="3" Grid.Row="4" FlowDirection="RightToLeft" VerticalAlignment="Center">
+            <Button Name="Btn_Replicate" Content="Replicate" Click="OnReplicationClick" Height="30" Width="60" Margin="0 0 5 0" />
+            <Button Name="Btn_Stop" Content="Stop" Click="OnStopReplicationClick" IsEnabled="False" Height="30" Width="60" VerticalAlignment="Center" />
+        </WrapPanel>
+
+        <TextBox Name="Txt_Result" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="5" Margin="0 0 0 10" AcceptsReturn="True" VerticalScrollBarVisibility="Visible" ></TextBox>
+        <TextBox Name="Txt_Logs" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="6" AcceptsReturn="True" FontFamily="Lucida Console" FontSize="11" VerticalScrollBarVisibility="Visible"></TextBox>
+
+        <ProgressBar Name="Pb_Status" Minimum="0" Maximum="100" Value="0" Grid.ColumnSpan="4" Grid.Row="7" VerticalAlignment="Center" Height="30"></ProgressBar>
+        
+    </Grid>
+</Window>
