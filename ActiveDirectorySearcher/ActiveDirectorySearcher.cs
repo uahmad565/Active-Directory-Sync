@@ -16,7 +16,7 @@ public class ActiveDirectoryHelper
     public static async Task GetADObjects(Int64 licenseID, InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, CancellationToken cancellationToken)
     {
         progress?.Report(new($"Processing {objectType}. {Environment.NewLine}", ""));
-        var basePath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
         string filePath = objectType switch
         {
             ObjectType.User => Path.Combine(basePath ?? "", "Info", "UserReplicationTime.txt"),
@@ -50,19 +50,14 @@ public class ActiveDirectoryHelper
                 cancellationToken.ThrowIfCancellationRequested();
                 var result = (SearchResult)resultsEnumerator.Current;
                 objectsList.Add(result);
-
-                //string json = JsonSerializer.Serialize(result);
                 var distinguishedName = result.Properties["distinguishedName"][0] as string ?? "";
                 dnList.Add(distinguishedName);
 
                 if ((i + 1) % 20 == 0)
                     ReportFetchObjects(objectType, dnList, i + 1, progress);
 
-                #region Sending Objects
                 if ((i + 1) % 1000 == 0)
                     await SendObjectListToWebService(licenseID, objectsList, objectType, progress);
-
-                #endregion
             }
             if (dnList.Count > 0)
                 ReportFetchObjects(objectType, dnList, i, progress);

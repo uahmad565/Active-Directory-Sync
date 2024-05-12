@@ -57,7 +57,7 @@ namespace ActiveDirectoryReplication
                 var task = Task.Run(async () =>
                 {
                     PrintResultTextBox("Start Fetching Groups");
-                    await ActiveDirectoryHelper.GetADObjects(2,inputCreds, progressReporter, ObjectType.Group, _cancellationToken.Token);
+                    await ActiveDirectoryHelper.GetADObjects(2, inputCreds, progressReporter, ObjectType.Group, _cancellationToken.Token);
                     PrintResultTextBox("Start Fetching Users");
                     await ActiveDirectoryHelper.GetADObjects(2, inputCreds, progressReporter, ObjectType.User, _cancellationToken.Token);
                     PrintResultTextBox("Finished Replication");
@@ -77,6 +77,15 @@ namespace ActiveDirectoryReplication
             }
             finally
             {
+                try
+                {
+                    CustomLogger customLogger = new CustomLogger("logs.txt", "");
+                    customLogger.WriteInfo(Txt_Result.Text + Environment.NewLine + "TxtLogs: " + Environment.NewLine + Txt_Logs.Text);
+                }
+                catch (Exception ex)
+                {
+                    Txt_Result.Text += $"Error {ex.Message}In writing logs{Environment.NewLine}";
+                }
                 Btn_Replicate.IsEnabled = true;
                 Btn_Stop.IsEnabled = false;
                 Pb_Status.IsIndeterminate = false;
