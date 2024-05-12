@@ -54,13 +54,13 @@ namespace ActiveDirectoryReplication
                 _cancellationToken = new();
                 int.TryParse(Txt_Port.Text, out var port);
                 InputCreds inputCreds = new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port);
-                var task = Task.Run(() =>
+                var task = Task.Run(async () =>
                 {
                     PrintResultTextBox("Start Fetching Groups");
-                    ActiveDirectoryHelper.GetADObjects(inputCreds, progressReporter, ObjectType.User, _cancellationToken.Token);
+                    await ActiveDirectoryHelper.GetADObjects(2,inputCreds, progressReporter, ObjectType.Group, _cancellationToken.Token);
                     PrintResultTextBox("Start Fetching Users");
-                    //ActiveDirectorySearcher.GetADObjects<ActiveDirectorySearcher.DTOs.Group>(inputCreds, progressReporter, _cancellationToken.Token, ObjectType.Group);
-
+                    await ActiveDirectoryHelper.GetADObjects(2, inputCreds, progressReporter, ObjectType.User, _cancellationToken.Token);
+                    PrintResultTextBox("Finished Replication");
                 });
 
                 await task;
