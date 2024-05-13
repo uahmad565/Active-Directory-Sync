@@ -67,15 +67,8 @@ namespace ActiveDirectorySearcher
 
         private void Write(string message, MessageType messageType)
         {
-            try
-            {
-                var formattedMessage = $"[{DateTime.Now:yyyy-mm-dd:HH:mm:ss.fff}] [{header}] [{messageType.ToString().ToUpper()}]: {message}{Environment.NewLine}";
-                File.AppendAllText(this.filePath, formattedMessage);
-            }
-            catch
-            {
-
-            }
+            var formattedMessage = $"[{DateTime.Now:yyyy-MM-dd:HH:mm:ss.fff}] [{header}] [{messageType.ToString().ToUpper()}]: {message}{Environment.NewLine}";
+            File.AppendAllText(this.filePath, formattedMessage);
         }
 
         private enum MessageType

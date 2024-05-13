@@ -31,7 +31,7 @@
         </TextBlock>
 
         <Label Grid.Column="0" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" >Domain Name:</Label>
-        <TextBox x:Name="Txt_Domain" Grid.Column="1" Grid.Row="1" Height="30" Padding="6" TextChanged="TxtDomainChanged"></TextBox>
+        <TextBox x:Name="Txt_Domain" Grid.Column="1" Grid.Row="1" Height="30" Padding="6" TextChanged="TxtDomainOrLicenseOrIntervalChanged"></TextBox>
 
         <Label Grid.Column="2" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center">Port:</Label>
         <TextBox x:Name="Txt_Port" PreviewTextInput="NumberValidationTextBox" Grid.Column="3" Grid.Row="1" VerticalAlignment="Center" Height="30" Padding="6"/>
@@ -43,7 +43,10 @@
         <PasswordBox x:Name="Txt_Password" Grid.Column="3" Grid.Row="2" Height="30" Padding="6"/>
 
         <Label Grid.Column="0" Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Center">Interval (seconds):</Label>
-        <TextBox x:Name="Txt_Interval" PreviewTextInput="NumberValidationTextBox" Grid.Column="1" Grid.Row="3" VerticalAlignment="Center" Height="30" Padding="6"/>
+        <TextBox x:Name="Txt_Interval" PreviewTextInput="NumberValidationTextBox" Grid.Column="1" Grid.Row="3" VerticalAlignment="Center" Height="30" Padding="6" TextChanged="TxtDomainOrLicenseOrIntervalChanged"></TextBox>
+
+        <Label Grid.Column="2" Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Center">License:</Label>
+        <TextBox x:Name="Txt_License" Grid.Column="3" Grid.Row="3" VerticalAlignment="Center" Height="30" Padding="6" TextChanged="TxtDomainOrLicenseOrIntervalChanged"/>
 
         <Button Name="Btn_TestConnection" Content="Test Connection" Grid.Column="0" Grid.Row="4" Click="OnTestConnectionClick" Height="30" Width="100" VerticalAlignment="Center" HorizontalAlignment="Left"/>
 
@@ -56,6 +59,7 @@
         <TextBox Name="Txt_Logs" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="6" AcceptsReturn="True" FontFamily="Lucida Console" FontSize="11" VerticalScrollBarVisibility="Visible"></TextBox>
 
         <ProgressBar Name="Pb_Status" Minimum="0" Maximum="100" Value="0" Grid.ColumnSpan="4" Grid.Row="7" VerticalAlignment="Center" Height="30"></ProgressBar>
-        
+
+        <TextBlock Name="Txt_Status" Grid.ColumnSpan="4" Grid.Row="8" Height="30"  FontSize="10" FontStyle="Italic" Foreground="#B2000000">ddd</TextBlock>
     </Grid>
 </Window>

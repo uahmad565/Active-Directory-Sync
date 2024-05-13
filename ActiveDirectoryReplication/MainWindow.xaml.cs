@@ -2,21 +2,13 @@
 using ActiveDirectorySearcher;
 using ActiveDirectorySearcher.DTOs;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using System.Windows.Threading;
 
 namespace ActiveDirectoryReplication
 {
@@ -25,7 +17,10 @@ namespace ActiveDirectoryReplication
     /// </summary>
     public partial class MainWindow : Window
     {
+        private bool isTaskRunning = false;
         private CancellationTokenSource? _cancellationToken;
+        private DispatcherTimer timer;
+        private Progress<Status> progressReporter;
         public MainWindow()
         {
             InitializeComponent();
@@ -33,49 +28,111 @@ namespace ActiveDirectoryReplication
 
         private void Window_Main_Loaded(object sender, RoutedEventArgs e)
         {
-            Btn_Replicate.IsEnabled = !string.IsNullOrWhiteSpace(Txt_Domain.Text);
-            Btn_TestConnection.IsEnabled = !string.IsNullOrWhiteSpace(Txt_Domain.Text);
+            Txt_Interval.Text = "30";
+            HandleReplicate_TestConnBtns();
         }
-        private async void OnReplicationClick(object sender, RoutedEventArgs e)
+
+
+
+        private void OnReplicationClick(object sender, RoutedEventArgs e)
         {
             try
             {
+                SetInputsUIState(false);
+                if (!Int64.TryParse(Txt_Interval.Text, out var interval)) //check whether it can access UI elements
+                {
+                    throw new InvalidOperationException("Please enter valid Interval");
+                }
+                // Initialize the DispatcherTimer
+                timer = new DispatcherTimer();
+                timer.Interval = TimeSpan.FromSeconds(interval);
+                timer.Tick += Timer_Tick;
+                Txt_Status.Text = "Replication in progress";
                 Btn_Replicate.IsEnabled = false;
                 Btn_Stop.IsEnabled = true;
-                Txt_Logs.Text = "";
-                Txt_Result.Text = "";
+                ResetLogsAndResults();
+
                 Pb_Status.IsIndeterminate = true;
-                Progress<Status> progressReporter = new Progress<Status>(st =>
+
+                progressReporter = new Progress<Status>(st =>
                 {
                     Txt_Logs.Text += st.LogMessage;
                     Txt_Result.Text += st.ResultMessage;
                 });
-
                 _cancellationToken = new();
-                int.TryParse(Txt_Port.Text, out var port);
-                InputCreds inputCreds = new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port);
-                var task = Task.Run(async () =>
-                {
-                    PrintResultTextBox("Start Fetching Groups");
-                    await ActiveDirectoryHelper.GetADObjects(2, inputCreds, progressReporter, ObjectType.Group, _cancellationToken.Token);
-                    PrintResultTextBox("Start Fetching Users");
-                    await ActiveDirectoryHelper.GetADObjects(2, inputCreds, progressReporter, ObjectType.User, _cancellationToken.Token);
-                    PrintResultTextBox("Finished Replication");
-                });
+                timer.Start();
+                Timer_Tick(timer, EventArgs.Empty);
 
-                await task;
-
-            }
-            catch (OperationCanceledException)
-            {
-                MessageBox.Show("Search has been cancelled.", "Search Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
-                Pb_Status.Value = 0;
             }
             catch (Exception ex)
             {
                 HandleError(ex);
+                Txt_Status.Text = "";
+            }           
+        }
+
+
+        private readonly object lockObject = new object();
+        async void Timer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                int.TryParse(Txt_Port.Text, out var port);
+                InputCreds inputCreds = new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text);
+                if (!isTaskRunning)
+                {
+                    Task? task = null;
+                    lock (lockObject)
+                    {
+                        ResetLogsAndResults();
+                        isTaskRunning = true;
+                        task = Task.Run(async () =>
+                        {
+                            PrintResultTextBoxDispatcher("Start Fetching Groups");
+                            await ActiveDirectoryHelper.GetADObjects(inputCreds, progressReporter, ObjectType.Group, _cancellationToken.Token);
+                            PrintResultTextBoxDispatcher("Start Fetching Users");
+                            await ActiveDirectoryHelper.GetADObjects(inputCreds, progressReporter, ObjectType.User, _cancellationToken.Token);
+                            PrintResultTextBoxDispatcher("Finished Replication");
+                            DumpLogsWithDispatcher();
+                            isTaskRunning = false;
+                        });
+                    }
+                    if (task != null)
+                        await task;
+                }
+                else
+                {
+                    //Task is already running, skipping this tick...
+                    PrintResultTextBoxDispatcher("Replication is already running, skipping this tick...");
+                }
+                _cancellationToken?.Token.ThrowIfCancellationRequested();
+            }
+            catch (Exception ex)
+            {
+                StopTimer();
+                Pb_Status.Value = 0;
+                Btn_Replicate.IsEnabled = true;
+                Btn_Stop.IsEnabled = false;
+                Pb_Status.IsIndeterminate = false;
+                if (ex is OperationCanceledException)
+                {
+                    MessageBox.Show("Search has been cancelled.", "Search Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else
+                {
+                    HandleError(ex);
+                }
+                Txt_Status.Text = "";
+                SetInputsUIState(true);
             }
             finally
+            {
+            }
+        }
+
+        private void DumpLogsWithDispatcher()
+        {
+            Application.Current.Dispatcher.Invoke(() =>
             {
                 try
                 {
@@ -86,20 +143,15 @@ namespace ActiveDirectoryReplication
                 {
                     Txt_Result.Text += $"Error {ex.Message}In writing logs{Environment.NewLine}";
                 }
-                Btn_Replicate.IsEnabled = true;
-                Btn_Stop.IsEnabled = false;
-                Pb_Status.IsIndeterminate = false;
-                Pb_Status.Value = 100f;
-            }
+            });
         }
 
-        private void PrintResultTextBox(string message)
+        private void StopTimer() //can be called multiple thread
         {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                Txt_Result.Text += message + "\n";
-            });
-
+            timer.Stop();
+            timer.Tick -= Timer_Tick;
+            timer = null;
+            //try statement  timer.Tick -= Timer_Tick; now it shouldn't give exception
         }
         private void OnStopReplicationClick(object sender, RoutedEventArgs e)
         {
@@ -107,6 +159,7 @@ namespace ActiveDirectoryReplication
             {
                 Btn_Stop.IsEnabled = false;
                 _cancellationToken.Cancel();
+                Txt_Status.Text = "Stopping Replication..";
             }
         }
 
@@ -116,7 +169,7 @@ namespace ActiveDirectoryReplication
             {
                 Btn_TestConnection.IsEnabled = false;
                 int.TryParse(Txt_Port.Text, out int port);
-                ActiveDirectoryHelper.TestConnection(new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port));
+                ActiveDirectoryHelper.TestConnection(new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text));
                 MessageBox.Show("Connection established successfully.", "Test Connection", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -129,10 +182,17 @@ namespace ActiveDirectoryReplication
             }
         }
 
-        private void TxtDomainChanged(object sender, TextChangedEventArgs e)
+        private void PrintResultTextBoxDispatcher(string message)
         {
-            Btn_Replicate.IsEnabled = !string.IsNullOrWhiteSpace(Txt_Domain.Text);
-            Btn_TestConnection.IsEnabled = !string.IsNullOrWhiteSpace(Txt_Domain.Text);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Txt_Result.Text += message + "\n";
+            });
+        }
+
+        private void TxtDomainOrLicenseOrIntervalChanged(object sender, TextChangedEventArgs e)
+        {
+            HandleReplicate_TestConnBtns();
         }
 
         private void NumberValidationTextBox(object sender, TextCompositionEventArgs e)
@@ -141,9 +201,31 @@ namespace ActiveDirectoryReplication
             e.Handled = regex.IsMatch(e.Text);
         }
         #region helping methods
+        private void HandleReplicate_TestConnBtns()
+        {
+            Btn_Replicate.IsEnabled = !string.IsNullOrWhiteSpace(Txt_Domain.Text) && !string.IsNullOrWhiteSpace(Txt_License.Text) && !string.IsNullOrWhiteSpace(Txt_Interval.Text);
+            Btn_TestConnection.IsEnabled = Btn_Replicate.IsEnabled;
+        }
         private void HandleError(Exception ex)
         {
             MessageBox.Show(ex.Message, ex.GetType().FullName, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        private void ResetLogsAndResults()
+        {
+            Txt_Result.Text = "";
+            Txt_Logs.Text = "";
+        }
+
+        private void SetInputsUIState(bool enable)
+        {
+            Txt_Domain.IsEnabled = enable;
+            Txt_Port.IsEnabled = enable;
+            Txt_Username.IsEnabled = enable;
+            Txt_Password.IsEnabled = enable;
+            Txt_Interval.IsEnabled = enable;
+            Txt_License.IsEnabled = enable;
+            Btn_TestConnection.IsEnabled = enable;
         }
         #endregion
     }

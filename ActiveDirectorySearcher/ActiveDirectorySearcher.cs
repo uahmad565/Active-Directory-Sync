@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections;
-using System.Diagnostics;
-using System.DirectoryServices;
-using System.Reflection;
+﻿using System.DirectoryServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using ActiveDirectorySearcher.DTOs;
 
 namespace ActiveDirectorySearcher;
@@ -13,7 +8,7 @@ namespace ActiveDirectorySearcher;
 #pragma warning disable CA1416 //suppress windows warning 
 public class ActiveDirectoryHelper
 {
-    public static async Task GetADObjects(Int64 licenseID, InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, CancellationToken cancellationToken)
+    public static async Task GetADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, CancellationToken cancellationToken)
     {
         progress?.Report(new($"Processing {objectType}. {Environment.NewLine}", ""));
         var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
@@ -57,13 +52,13 @@ public class ActiveDirectoryHelper
                     ReportFetchObjects(objectType, dnList, i + 1, progress);
 
                 if ((i + 1) % 1000 == 0)
-                    await SendObjectListToWebService(licenseID, objectsList, objectType, progress);
+                    await SendObjectListToWebService(inputCreds.License, objectsList, objectType, progress);
             }
             if (dnList.Count > 0)
                 ReportFetchObjects(objectType, dnList, i, progress);
 
             if (objectsList.Count > 0)
-                await SendObjectListToWebService(licenseID, objectsList, objectType, progress);
+                await SendObjectListToWebService(inputCreds.License, objectsList, objectType, progress);
 
 
         }
@@ -79,7 +74,7 @@ public class ActiveDirectoryHelper
     }
 
     #region Private static helper methods
-    private static async Task SendObjectListToWebService(Int64 licenseID, List<SearchResult> objectsList, ObjectType objectType, IProgress<Status>? progress)
+    private static async Task SendObjectListToWebService(string licenseID, List<SearchResult> objectsList, ObjectType objectType, IProgress<Status>? progress)
     {
         progress?.Report(new("", SendingObjectsRequestMessage(objectsList.Count, objectType)));
         var json = JsonSerializer.Serialize(objectsList);
