@@ -20,10 +20,11 @@
             <RowDefinition Height="1*" />
             <RowDefinition Height="1*" />
             <RowDefinition Height="1*" />
-            <RowDefinition Height="4*" />
-            <RowDefinition Height="6*" />
+            <RowDefinition Height="2*" />
             <RowDefinition Height="1*" />
-            <RowDefinition Height="0.5*" />
+            <RowDefinition Height="2*" />
+            <RowDefinition Height="3*" />
+            <RowDefinition Height="1*" />
         </Grid.RowDefinitions>
 
         <TextBlock Grid.ColumnSpan="4" FontSize="30" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -48,18 +49,28 @@
         <Label Grid.Column="2" Grid.Row="3" HorizontalAlignment="Right" VerticalAlignment="Center">License:</Label>
         <TextBox x:Name="Txt_License" Grid.Column="3" Grid.Row="3" VerticalAlignment="Center" Height="30" Padding="6" TextChanged="TxtDomainOrLicenseOrIntervalChanged"/>
 
-        <Button Name="Btn_TestConnection" Content="Test Connection" Grid.Column="0" Grid.Row="4" Click="OnTestConnectionClick" Height="30" Width="100" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+        <WrapPanel Grid.Column="1" Grid.Row="4" Grid.ColumnSpan="3" FlowDirection="LeftToRight" VerticalAlignment="Center" HorizontalAlignment="Left">
+            <Label  HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,0,4">Choose Containers:</Label>
+            <RadioButton x:Name="RadioBtn_All" Content="All"  HorizontalAlignment="Center"  VerticalAlignment="Center" Checked="RadioButton_Checked" Margin="0 0 12 0" />
+            <RadioButton x:Name="RadioBtn_Custom" Content="Custom"   HorizontalAlignment="Left" VerticalAlignment="Center"  Checked="RadioButton_Checked"/>
+        </WrapPanel>
+        <TextBox Grid.Column="1" Grid.Row="5" Grid.ColumnSpan="3" x:Name="Txt_Containers" AcceptsReturn="True" VerticalAlignment="Center" Height="65" >
+            </TextBox>
 
-        <WrapPanel Grid.Column="3" Grid.Row="4" FlowDirection="RightToLeft" VerticalAlignment="Center">
+        <Button Name="Btn_TestConnection" Content="Test Connection" Grid.Column="0" Grid.Row="6" Click="OnTestConnectionClick" Height="30" Width="100" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+
+        <WrapPanel Grid.Column="3" Grid.Row="6" FlowDirection="RightToLeft" VerticalAlignment="Center">
             <Button Name="Btn_Replicate" Content="Replicate" Click="OnReplicationClick" Height="30" Width="60" Margin="0 0 5 0" />
             <Button Name="Btn_Stop" Content="Stop" Click="OnStopReplicationClick" IsEnabled="False" Height="30" Width="60" VerticalAlignment="Center" />
         </WrapPanel>
 
-        <TextBox Name="Txt_Result" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="5" Margin="0 0 0 10" AcceptsReturn="True" VerticalScrollBarVisibility="Visible" ></TextBox>
-        <TextBox Name="Txt_Logs" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="6" AcceptsReturn="True" FontFamily="Lucida Console" FontSize="11" VerticalScrollBarVisibility="Visible"></TextBox>
+        <TextBox Name="Txt_Result" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="7" Margin="0 0 0 10" AcceptsReturn="True" VerticalScrollBarVisibility="Visible" ></TextBox>
+        <TextBox Name="Txt_Logs" IsReadOnly="True" Grid.ColumnSpan="4" Grid.Row="8" AcceptsReturn="True" FontFamily="Lucida Console" FontSize="11" VerticalScrollBarVisibility="Visible"></TextBox>
 
-        <ProgressBar Name="Pb_Status" Minimum="0" Maximum="100" Value="0" Grid.ColumnSpan="4" Grid.Row="7" VerticalAlignment="Center" Height="30"></ProgressBar>
+        <ProgressBar Name="Pb_Status" Minimum="0" Maximum="100" Value="0" Grid.ColumnSpan="4" Grid.Row="9" VerticalAlignment="Center" Height="30"></ProgressBar>
 
-        <TextBlock Name="Txt_Status" Grid.ColumnSpan="4" Grid.Row="8" Height="30"  FontSize="10" FontStyle="Italic" Foreground="#B2000000">ddd</TextBlock>
+        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Name="Txt_Status" Grid.ColumnSpan="4" Grid.Row="9" Height="30"  FontSize="12" FontStyle="Italic" Foreground="#B2000000" Margin="0,6 ,0,0">ddd</TextBlock>
+
+
     </Grid>
 </Window>

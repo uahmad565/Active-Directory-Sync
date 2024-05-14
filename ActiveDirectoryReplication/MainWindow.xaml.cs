@@ -2,6 +2,7 @@
 using ActiveDirectorySearcher;
 using ActiveDirectorySearcher.DTOs;
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,6 +22,8 @@ namespace ActiveDirectoryReplication
         private CancellationTokenSource? _cancellationToken;
         private DispatcherTimer timer;
         private Progress<Status> progressReporter;
+        private IEnumerable<string> containers;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -29,6 +32,8 @@ namespace ActiveDirectoryReplication
         private void Window_Main_Loaded(object sender, RoutedEventArgs e)
         {
             Txt_Interval.Text = "30";
+            RadioBtn_All.IsChecked = true;
+            Txt_Containers.Text = "CN=Users,DC=usman,DC=local;\nOU=TestOU,DC=usman,DC=local;";
             HandleReplicate_TestConnBtns();
         }
 
@@ -38,6 +43,13 @@ namespace ActiveDirectoryReplication
         {
             try
             {
+                isTaskRunning = false;
+                containers = new List<string>();
+                if (RadioBtn_Custom.IsChecked == true)
+                {
+                    containers = ActiveDirectoryReplication.Helper.ContainerParser.Parse(Txt_Containers.Text);
+                }
+
                 SetInputsUIState(false);
                 if (!Int64.TryParse(Txt_Interval.Text, out var interval)) //check whether it can access UI elements
                 {
@@ -53,7 +65,7 @@ namespace ActiveDirectoryReplication
                 ResetLogsAndResults();
 
                 Pb_Status.IsIndeterminate = true;
-
+                ActiveDirectoryHelper.LoadOUReplication();
                 progressReporter = new Progress<Status>(st =>
                 {
                     Txt_Logs.Text += st.LogMessage;
@@ -68,7 +80,7 @@ namespace ActiveDirectoryReplication
             {
                 HandleError(ex);
                 Txt_Status.Text = "";
-            }           
+            }
         }
 
 
@@ -89,9 +101,9 @@ namespace ActiveDirectoryReplication
                         task = Task.Run(async () =>
                         {
                             PrintResultTextBoxDispatcher("Start Fetching Groups");
-                            await ActiveDirectoryHelper.GetADObjects(inputCreds, progressReporter, ObjectType.Group, _cancellationToken.Token);
+                            await ActiveDirectoryHelper.ProcessADObjects(inputCreds, progressReporter, ObjectType.Group, containers, _cancellationToken.Token);
                             PrintResultTextBoxDispatcher("Start Fetching Users");
-                            await ActiveDirectoryHelper.GetADObjects(inputCreds, progressReporter, ObjectType.User, _cancellationToken.Token);
+                            await ActiveDirectoryHelper.ProcessADObjects(inputCreds, progressReporter, ObjectType.User, containers, _cancellationToken.Token);
                             PrintResultTextBoxDispatcher("Finished Replication");
                             DumpLogsWithDispatcher();
                             isTaskRunning = false;
@@ -102,7 +114,6 @@ namespace ActiveDirectoryReplication
                 }
                 else
                 {
-                    //Task is already running, skipping this tick...
                     PrintResultTextBoxDispatcher("Replication is already running, skipping this tick...");
                 }
                 _cancellationToken?.Token.ThrowIfCancellationRequested();
@@ -114,6 +125,7 @@ namespace ActiveDirectoryReplication
                 Btn_Replicate.IsEnabled = true;
                 Btn_Stop.IsEnabled = false;
                 Pb_Status.IsIndeterminate = false;
+                ActiveDirectoryHelper.WriteOUReplication();
                 if (ex is OperationCanceledException)
                 {
                     MessageBox.Show("Search has been cancelled.", "Search Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -123,13 +135,42 @@ namespace ActiveDirectoryReplication
                     HandleError(ex);
                 }
                 Txt_Status.Text = "";
-                SetInputsUIState(true);
+                SetInputsUIState(true);               
             }
             finally
             {
             }
         }
 
+        private void OnStopReplicationClick(object sender, RoutedEventArgs e)
+        {
+            if (_cancellationToken is not null)
+            {
+                Btn_Stop.IsEnabled = false;
+                _cancellationToken.Cancel();
+                Txt_Status.Text = "Stopping Replication..";
+            }
+        }
+
+        private void RadioButton_Checked(object sender, RoutedEventArgs e)
+        {
+            // Cast sender to RadioButton to determine which radio button is checked
+            RadioButton radioButton = sender as RadioButton;
+
+            // Update the resultTextBlock based on which radio button is checked
+            if (radioButton != null && radioButton.IsChecked == true)
+            {
+                if (radioButton == RadioBtn_All)
+                {
+                    Txt_Containers.IsEnabled = false;
+                    //resultTextBlock = "Option 1 is selected.";
+                }
+                else if (radioButton == RadioBtn_Custom)
+                {
+                    Txt_Containers.IsEnabled = true;
+                }
+            }
+        }
         private void DumpLogsWithDispatcher()
         {
             Application.Current.Dispatcher.Invoke(() =>
@@ -153,15 +194,7 @@ namespace ActiveDirectoryReplication
             timer = null;
             //try statement  timer.Tick -= Timer_Tick; now it shouldn't give exception
         }
-        private void OnStopReplicationClick(object sender, RoutedEventArgs e)
-        {
-            if (_cancellationToken is not null)
-            {
-                Btn_Stop.IsEnabled = false;
-                _cancellationToken.Cancel();
-                Txt_Status.Text = "Stopping Replication..";
-            }
-        }
+
 
         private void OnTestConnectionClick(object sender, RoutedEventArgs e)
         {
@@ -226,6 +259,16 @@ namespace ActiveDirectoryReplication
             Txt_Interval.IsEnabled = enable;
             Txt_License.IsEnabled = enable;
             Btn_TestConnection.IsEnabled = enable;
+            RadioBtn_All.IsEnabled = enable;
+            RadioBtn_Custom.IsEnabled = enable;
+            Txt_Containers.IsEnabled = enable;
+            if(enable && RadioBtn_All.IsChecked==true)
+            {
+                Txt_Containers.IsEnabled = false;
+            }
+            else
+                Txt_Containers.IsEnabled = enable;
+
         }
         #endregion
     }

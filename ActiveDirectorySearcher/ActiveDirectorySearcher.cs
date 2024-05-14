@@ -8,24 +8,68 @@ namespace ActiveDirectorySearcher;
 #pragma warning disable CA1416 //suppress windows warning 
 public class ActiveDirectoryHelper
 {
-    public static async Task GetADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, CancellationToken cancellationToken)
+    public static Dictionary<string, string> keyValuePairs = new Dictionary<string, string>();
+    public static void LoadOUReplication()
     {
-        progress?.Report(new($"Processing {objectType}. {Environment.NewLine}", ""));
         var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
-        string filePath = objectType switch
+        var filePath = Path.Combine(basePath ?? "", "Info", "OUReplicationTime.txt");
+        string fileJson = File.ReadAllText(filePath);
+        if (!string.IsNullOrEmpty(fileJson))
         {
-            ObjectType.User => Path.Combine(basePath ?? "", "Info", "UserReplicationTime.txt"),
-            ObjectType.Group => Path.Combine(basePath ?? "", "Info", "GroupReplicationTime.txt"),
-            _ => ""
-        };
+            keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, string>>(fileJson) ?? new Dictionary<string, string>();
+        }
+    }
 
-        var currReplicationTime = DateTime.Now.ToUniversalTime().ToString();
-        var lastReplicationTime = File.ReadAllText(filePath);
+    public static void WriteOUReplication()
+    {
+        var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
+        var filePath = Path.Combine(basePath ?? "", "Info", "OUReplicationTime.txt");
+        File.WriteAllText(filePath, JsonSerializer.Serialize(keyValuePairs));
+    }
+
+    public static async Task ProcessADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, IEnumerable<string> containers, CancellationToken cancellationToken)
+    {
+
+        if (containers.Count() > 0)
+        {
+            foreach (var container in containers)
+            {
+                var currReplicationTime = DateTime.Now.ToUniversalTime().ToString();
+                string? lastReplicationTime = "";
+
+                if (keyValuePairs.ContainsKey($"{container}_{objectType}"))
+                    lastReplicationTime = keyValuePairs[$"{container}_{objectType}"];
+
+                await ProcessADObjects(inputCreds, progress, objectType, cancellationToken, lastReplicationTime, container);
+                keyValuePairs[$"{container}_{objectType}"] = currReplicationTime;
+            }
+        }
+        else
+        {
+            var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
+            string filePath = objectType switch
+            {
+                ObjectType.User => Path.Combine(basePath ?? "", "Info", "UserReplicationTime.txt"),
+                ObjectType.Group => Path.Combine(basePath ?? "", "Info", "GroupReplicationTime.txt"),
+                _ => ""
+            };
+
+            var currReplicationTime = DateTime.Now.ToUniversalTime().ToString();
+            var lastReplicationTime = File.ReadAllText(filePath);
+            await ProcessADObjects(inputCreds, progress, objectType, cancellationToken, lastReplicationTime);
+            File.WriteAllText(filePath, currReplicationTime);
+        }
+    }
+    private static async Task ProcessADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, CancellationToken cancellationToken, string? lastReplicationTime, string ouPath = "")
+    {
+        progress?.Report(new($"Processing {objectType} {ouPath}. {Environment.NewLine}", ""));
+
         var whenChangedFilter = string.IsNullOrEmpty(lastReplicationTime) ? "" : DateTime.Parse(lastReplicationTime).ToString("yyyyMMddHHmmss.0Z");
         var objectsList = new List<SearchResult>();
+        var path = new StringBuilder($"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}");
+        path.Append(ouPath != "" ? $"/{ouPath}" : "");
 
-        var path = $"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}";
-        using var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path) : new DirectoryEntry(path, inputCreds.UserName, inputCreds.Password);
+        using var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path.ToString()) : new DirectoryEntry(path.ToString(), inputCreds.UserName, inputCreds.Password);
         _ = root.Name; // checking connection; will throw if connection is not succesful
 
         using var searcher = new DirectorySearcher(root);
@@ -62,7 +106,6 @@ public class ActiveDirectoryHelper
 
 
         }
-        File.WriteAllText(filePath, currReplicationTime);
     }
 
     public static bool TestConnection(InputCreds inputCreds)
