@@ -1,4 +1,5 @@
-﻿using System.DirectoryServices;
+﻿using System.Collections.Specialized;
+using System.DirectoryServices;
 using System.Text;
 using System.Text.Json;
 using ActiveDirectorySearcher.DTOs;
@@ -8,29 +9,28 @@ namespace ActiveDirectorySearcher;
 #pragma warning disable CA1416 //suppress windows warning 
 public class ActiveDirectoryHelper
 {
-    public static Dictionary<string, string> keyValuePairs = new Dictionary<string, string>();
-    public static void LoadOUReplication()
+    private static Dictionary<string, string> keyValuePairs = new();
+
+    public static async Task LoadOUReplication()
     {
         var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
         var filePath = Path.Combine(basePath ?? "", "Info", "OUReplicationTime.txt");
-        string fileJson = File.ReadAllText(filePath);
-        if (!string.IsNullOrEmpty(fileJson))
-        {
-            keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, string>>(fileJson) ?? new Dictionary<string, string>();
-        }
+        using var fstream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        keyValuePairs = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(fstream) ?? new Dictionary<string, string>();
     }
 
-    public static void WriteOUReplication()
+    public static async Task WriteOUReplication()
     {
         var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
         var filePath = Path.Combine(basePath ?? "", "Info", "OUReplicationTime.txt");
-        File.WriteAllText(filePath, JsonSerializer.Serialize(keyValuePairs));
+        var json = await GetSerializedObject(keyValuePairs);
+        await File.WriteAllTextAsync(filePath, json);
     }
 
-    public static async Task ProcessADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, IEnumerable<string> containers, CancellationToken cancellationToken)
+    public static async Task ProcessADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, ICollection<string> containers, CancellationToken cancellationToken)
     {
-
-        if (containers.Count() > 0)
+        if (containers.Count > 0)
         {
             foreach (var container in containers)
             {
@@ -55,9 +55,9 @@ public class ActiveDirectoryHelper
             };
 
             var currReplicationTime = DateTime.Now.ToUniversalTime().ToString();
-            var lastReplicationTime = File.ReadAllText(filePath);
+            var lastReplicationTime = await File.ReadAllTextAsync(filePath);
             await ProcessADObjects(inputCreds, progress, objectType, cancellationToken, lastReplicationTime);
-            File.WriteAllText(filePath, currReplicationTime);
+            await File.WriteAllTextAsync(filePath, currReplicationTime, cancellationToken);
         }
     }
     private static async Task ProcessADObjects(InputCreds inputCreds, IProgress<Status>? progress, ObjectType objectType, CancellationToken cancellationToken, string? lastReplicationTime, string ouPath = "")
@@ -66,18 +66,14 @@ public class ActiveDirectoryHelper
 
         var whenChangedFilter = string.IsNullOrEmpty(lastReplicationTime) ? "" : DateTime.Parse(lastReplicationTime).ToString("yyyyMMddHHmmss.0Z");
         var objectsList = new List<SearchResult>();
-        var path = new StringBuilder($"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}");
-        path.Append(ouPath != "" ? $"/{ouPath}" : "");
-
-        using var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path.ToString()) : new DirectoryEntry(path.ToString(), inputCreds.UserName, inputCreds.Password);
-        _ = root.Name; // checking connection; will throw if connection is not succesful
+        using var root = await GetRootEntry(inputCreds);
 
         using var searcher = new DirectorySearcher(root);
         searcher.Filter = PrepareLdapQuery(objectType, whenChangedFilter);
         searcher.PageSize = 500;
         searcher.SizeLimit = 0;
 
-        using var results = searcher?.FindAll();
+        using var results = await Task.Run(() => searcher?.FindAll());
         var resultsEnumerator = results?.GetEnumerator();
 
         if (resultsEnumerator != null)
@@ -108,26 +104,32 @@ public class ActiveDirectoryHelper
         }
     }
 
-    public static bool TestConnection(InputCreds inputCreds)
+    public static async Task<DirectoryEntry> GetRootEntry(InputCreds inputCreds)
     {
-        var path = $"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}";
-        using var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path) : new DirectoryEntry(path, inputCreds.UserName, inputCreds.Password);
-        _ = root.Name; // checking connection; will throw if connection is not succesful
-        return true;
+        var entry = await Task.Run(() =>
+        {
+            var path = $"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}";
+            var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path) : new DirectoryEntry(path, inputCreds.UserName, inputCreds.Password);
+            _ = root.Name; // checking connection; will throw if connection is not succesful
+            return root;
+        });
+
+        return entry;
     }
 
     #region Private static helper methods
     private static async Task SendObjectListToWebService(string licenseID, List<SearchResult> objectsList, ObjectType objectType, IProgress<Status>? progress)
     {
         progress?.Report(new("", SendingObjectsRequestMessage(objectsList.Count, objectType)));
-        var json = JsonSerializer.Serialize(objectsList);
+
+        var json = await GetSerializedObject(objectsList);
         string apiUrl = objectType switch
         {
             ObjectType.User => $"https://ns-server.vantagemdm.com/active-directory/sync?licenseId={licenseID}&type=user",
             ObjectType.Group => $"https://ns-server.vantagemdm.com/active-directory/sync?licenseId={licenseID}&type=group",
             _ => ""
         };
-        using HttpClient client = new HttpClient();
+        using var client = new HttpClient();
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         HttpResponseMessage response;
@@ -170,11 +172,14 @@ public class ActiveDirectoryHelper
         dnList.Clear();
     }
 
-    private static double PercentageProcessed(int i, int total)
-    {
-        return ((double)i / total) * 100;
-    }
     #endregion
 
+    private static async Task<string> GetSerializedObject(object obj)
+    {
+        using var memStream = new MemoryStream();
+        await JsonSerializer.SerializeAsync(memStream, obj);
+        var json = await Task.Run(() => Encoding.UTF8.GetString(memStream.GetBuffer()));
+        return json;
+    }
 }
 #pragma warning restore CA1416

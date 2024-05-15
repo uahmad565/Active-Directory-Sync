@@ -8,13 +8,13 @@ namespace ActiveDirectoryReplication.Helper
 {
     public static class ContainerParser
     {
-        public static IEnumerable<string> Parse(string text)
+        public static ICollection<string> Parse(string text)
         {
             try
             {
                 char delimiter = ';';
                 var substrings = text.Split(delimiter).Where(s => !string.IsNullOrEmpty(s));
-                return substrings.Select(s => s.Trim());
+                return substrings.Select(s => s.Trim()).ToArray();
             }
             catch (Exception ex)
             {

@@ -22,7 +22,7 @@ namespace ActiveDirectoryReplication
         private CancellationTokenSource? _cancellationToken;
         private DispatcherTimer timer;
         private Progress<Status> progressReporter;
-        private IEnumerable<string> containers;
+        private ICollection<string> containers;
 
         public MainWindow()
         {
@@ -39,7 +39,7 @@ namespace ActiveDirectoryReplication
 
 
 
-        private void OnReplicationClick(object sender, RoutedEventArgs e)
+        private async void OnReplicationClick(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -47,17 +47,21 @@ namespace ActiveDirectoryReplication
                 containers = new List<string>();
                 if (RadioBtn_Custom.IsChecked == true)
                 {
-                    containers = ActiveDirectoryReplication.Helper.ContainerParser.Parse(Txt_Containers.Text);
+                    containers = Helper.ContainerParser.Parse(Txt_Containers.Text);
                 }
 
                 SetInputsUIState(false);
-                if (!Int64.TryParse(Txt_Interval.Text, out var interval)) //check whether it can access UI elements
+                if (!long.TryParse(Txt_Interval.Text, out var interval)) //check whether it can access UI elements
                 {
                     throw new InvalidOperationException("Please enter valid Interval");
                 }
+
                 // Initialize the DispatcherTimer
-                timer = new DispatcherTimer();
-                timer.Interval = TimeSpan.FromSeconds(interval);
+                timer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(interval)
+                };
+
                 timer.Tick += Timer_Tick;
                 Txt_Status.Text = "Replication in progress";
                 Btn_Replicate.IsEnabled = false;
@@ -65,7 +69,7 @@ namespace ActiveDirectoryReplication
                 ResetLogsAndResults();
 
                 Pb_Status.IsIndeterminate = true;
-                ActiveDirectoryHelper.LoadOUReplication();
+                await ActiveDirectoryHelper.LoadOUReplication();
                 progressReporter = new Progress<Status>(st =>
                 {
                     Txt_Logs.Text += st.LogMessage;
@@ -83,39 +87,30 @@ namespace ActiveDirectoryReplication
             }
         }
 
-
-        private readonly object lockObject = new object();
-        async void Timer_Tick(object sender, EventArgs e)
+        private async void Timer_Tick(object sender, EventArgs e)
         {
+            if (isTaskRunning)
+            {
+                PrintResultTextBoxDispatcher("Replication is already running, skipping this tick...");
+                return;
+            }
+
             try
             {
-                int.TryParse(Txt_Port.Text, out var port);
+                isTaskRunning = true;
+
+                _ = int.TryParse(Txt_Port.Text, out var port);
                 InputCreds inputCreds = new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text);
-                if (!isTaskRunning)
+                ResetLogsAndResults();
+                await Task.Run(async () =>
                 {
-                    Task? task = null;
-                    lock (lockObject)
-                    {
-                        ResetLogsAndResults();
-                        isTaskRunning = true;
-                        task = Task.Run(async () =>
-                        {
-                            PrintResultTextBoxDispatcher("Start Fetching Groups");
-                            await ActiveDirectoryHelper.ProcessADObjects(inputCreds, progressReporter, ObjectType.Group, containers, _cancellationToken.Token);
-                            PrintResultTextBoxDispatcher("Start Fetching Users");
-                            await ActiveDirectoryHelper.ProcessADObjects(inputCreds, progressReporter, ObjectType.User, containers, _cancellationToken.Token);
-                            PrintResultTextBoxDispatcher("Finished Replication");
-                            DumpLogsWithDispatcher();
-                            isTaskRunning = false;
-                        });
-                    }
-                    if (task != null)
-                        await task;
-                }
-                else
-                {
-                    PrintResultTextBoxDispatcher("Replication is already running, skipping this tick...");
-                }
+                    PrintResultTextBoxDispatcher("Start Fetching Groups");
+                    await ActiveDirectoryHelper.ProcessADObjects(inputCreds, progressReporter, ObjectType.Group, containers, _cancellationToken.Token);
+                    PrintResultTextBoxDispatcher("Start Fetching Users");
+                    await ActiveDirectoryHelper.ProcessADObjects(inputCreds, progressReporter, ObjectType.User, containers, _cancellationToken.Token);
+                    PrintResultTextBoxDispatcher("Finished Replication");
+                    DumpLogsWithDispatcher();
+                });
                 _cancellationToken?.Token.ThrowIfCancellationRequested();
             }
             catch (Exception ex)
@@ -125,7 +120,7 @@ namespace ActiveDirectoryReplication
                 Btn_Replicate.IsEnabled = true;
                 Btn_Stop.IsEnabled = false;
                 Pb_Status.IsIndeterminate = false;
-                ActiveDirectoryHelper.WriteOUReplication();
+                await ActiveDirectoryHelper.WriteOUReplication();
                 if (ex is OperationCanceledException)
                 {
                     MessageBox.Show("Search has been cancelled.", "Search Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -139,6 +134,7 @@ namespace ActiveDirectoryReplication
             }
             finally
             {
+                isTaskRunning = false;
             }
         }
 
@@ -155,7 +151,7 @@ namespace ActiveDirectoryReplication
         private void RadioButton_Checked(object sender, RoutedEventArgs e)
         {
             // Cast sender to RadioButton to determine which radio button is checked
-            RadioButton radioButton = sender as RadioButton;
+            RadioButton radioButton = (RadioButton)sender;
 
             // Update the resultTextBlock based on which radio button is checked
             if (radioButton != null && radioButton.IsChecked == true)
@@ -173,12 +169,13 @@ namespace ActiveDirectoryReplication
         }
         private void DumpLogsWithDispatcher()
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            Application.Current.Dispatcher.Invoke(async () =>
             {
                 try
                 {
                     CustomLogger customLogger = new CustomLogger("logs.txt", "");
-                    customLogger.WriteInfo(Txt_Result.Text + Environment.NewLine + "TxtLogs: " + Environment.NewLine + Txt_Logs.Text);
+                    var txt = Txt_Result.Text + Environment.NewLine + "TxtLogs: " + Environment.NewLine + Txt_Logs.Text;
+                    await Task.Run(() => customLogger.WriteInfo(txt));
                 }
                 catch (Exception ex)
                 {
@@ -196,13 +193,17 @@ namespace ActiveDirectoryReplication
         }
 
 
-        private void OnTestConnectionClick(object sender, RoutedEventArgs e)
+        private async void OnTestConnectionClick(object sender, RoutedEventArgs e)
         {
             try
             {
                 Btn_TestConnection.IsEnabled = false;
                 int.TryParse(Txt_Port.Text, out int port);
-                ActiveDirectoryHelper.TestConnection(new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text));
+                using (await ActiveDirectoryHelper.GetRootEntry(new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text)))
+                {
+                    // empty (just for disposing the entry created for testing the connection)
+                }
+
                 MessageBox.Show("Connection established successfully.", "Test Connection", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
