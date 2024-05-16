@@ -27,6 +27,16 @@ namespace ActiveDirectoryReplication
         public MainWindow()
         {
             InitializeComponent();
+            Closing += MainWindow_Closing;
+        }
+
+        private async void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            try
+            {
+                await ActiveDirectoryHelper.WriteOUReplication();
+            }
+            catch { }
         }
 
         private void Window_Main_Loaded(object sender, RoutedEventArgs e)
@@ -130,7 +140,7 @@ namespace ActiveDirectoryReplication
                     HandleError(ex);
                 }
                 Txt_Status.Text = "";
-                SetInputsUIState(true);               
+                SetInputsUIState(true);
             }
             finally
             {
@@ -199,7 +209,7 @@ namespace ActiveDirectoryReplication
             {
                 Btn_TestConnection.IsEnabled = false;
                 int.TryParse(Txt_Port.Text, out int port);
-                using (await ActiveDirectoryHelper.GetRootEntry(new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text)))
+                using (await ActiveDirectoryHelper.GetRootEntry(new(Txt_Domain.Text, Txt_Username.Text, Txt_Password.Password, port, Txt_License.Text), "")) ;
                 {
                     // empty (just for disposing the entry created for testing the connection)
                 }
@@ -240,9 +250,22 @@ namespace ActiveDirectoryReplication
             Btn_Replicate.IsEnabled = !string.IsNullOrWhiteSpace(Txt_Domain.Text) && !string.IsNullOrWhiteSpace(Txt_License.Text) && !string.IsNullOrWhiteSpace(Txt_Interval.Text);
             Btn_TestConnection.IsEnabled = Btn_Replicate.IsEnabled;
         }
-        private void HandleError(Exception ex)
+        private async void HandleError(Exception ex)
         {
+            var task = Task.Run(() =>
+            {
+                CustomLogger customLogger = new CustomLogger("logs.txt", "");
+                customLogger.WriteException(ex);
+            });
             MessageBox.Show(ex.Message, ex.GetType().FullName, MessageBoxButton.OK, MessageBoxImage.Error);
+            try
+            {
+                await task;
+            }
+            catch (Exception ex1)
+            {
+                Txt_Result.Text += $"Error {ex1.Message}In writing logs{Environment.NewLine}";
+            }
         }
 
         private void ResetLogsAndResults()
@@ -263,7 +286,7 @@ namespace ActiveDirectoryReplication
             RadioBtn_All.IsEnabled = enable;
             RadioBtn_Custom.IsEnabled = enable;
             Txt_Containers.IsEnabled = enable;
-            if(enable && RadioBtn_All.IsChecked==true)
+            if (enable && RadioBtn_All.IsChecked == true)
             {
                 Txt_Containers.IsEnabled = false;
             }

@@ -1,5 +1,4 @@
-﻿using System.Collections.Specialized;
-using System.DirectoryServices;
+﻿using System.DirectoryServices;
 using System.Text;
 using System.Text.Json;
 using ActiveDirectorySearcher.DTOs;
@@ -66,7 +65,7 @@ public class ActiveDirectoryHelper
 
         var whenChangedFilter = string.IsNullOrEmpty(lastReplicationTime) ? "" : DateTime.Parse(lastReplicationTime).ToString("yyyyMMddHHmmss.0Z");
         var objectsList = new List<SearchResult>();
-        using var root = await GetRootEntry(inputCreds);
+        using var root = await GetRootEntry(inputCreds, ouPath);
 
         using var searcher = new DirectorySearcher(root);
         searcher.Filter = PrepareLdapQuery(objectType, whenChangedFilter);
@@ -104,12 +103,13 @@ public class ActiveDirectoryHelper
         }
     }
 
-    public static async Task<DirectoryEntry> GetRootEntry(InputCreds inputCreds)
+    public static async Task<DirectoryEntry> GetRootEntry(InputCreds inputCreds, string ouPath)
     {
         var entry = await Task.Run(() =>
         {
-            var path = $"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}";
-            var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path) : new DirectoryEntry(path, inputCreds.UserName, inputCreds.Password);
+            var path = new StringBuilder($"LDAP://{inputCreds.Domain}{(inputCreds.Port is 0 ? "" : $":{inputCreds.Port}")}");
+            path.Append(ouPath != "" ? $"/{ouPath}" : "");
+            var root = string.IsNullOrEmpty(inputCreds.UserName) ? new DirectoryEntry(path.ToString()) : new DirectoryEntry(path.ToString(), inputCreds.UserName, inputCreds.Password);
             _ = root.Name; // checking connection; will throw if connection is not succesful
             return root;
         });
