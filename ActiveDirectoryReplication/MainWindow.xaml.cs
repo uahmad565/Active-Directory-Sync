@@ -27,16 +27,6 @@ namespace ActiveDirectoryReplication
         public MainWindow()
         {
             InitializeComponent();
-            Closing += MainWindow_Closing;
-        }
-
-        private async void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
-        {
-            try
-            {
-                await ActiveDirectoryHelper.WriteOUReplication();
-            }
-            catch { }
         }
 
         private void Window_Main_Loaded(object sender, RoutedEventArgs e)
@@ -92,8 +82,8 @@ namespace ActiveDirectoryReplication
             }
             catch (Exception ex)
             {
+                ResetApplicationStateOnError();
                 HandleError(ex);
-                Txt_Status.Text = "";
             }
         }
 
@@ -125,27 +115,33 @@ namespace ActiveDirectoryReplication
             }
             catch (Exception ex)
             {
-                StopTimer();
-                Pb_Status.Value = 0;
-                Btn_Replicate.IsEnabled = true;
-                Btn_Stop.IsEnabled = false;
-                Pb_Status.IsIndeterminate = false;
-                await ActiveDirectoryHelper.WriteOUReplication();
+                ResetApplicationStateOnError();
                 if (ex is OperationCanceledException)
                 {
-                    MessageBox.Show("Search has been cancelled.", "Search Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show("Search has been cancelled. "+ ex.Message, "Search Cancelled", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 else
                 {
                     HandleError(ex);
                 }
-                Txt_Status.Text = "";
-                SetInputsUIState(true);
+                await ActiveDirectoryHelper.WriteOUReplication();
+
             }
             finally
             {
                 isTaskRunning = false;
             }
+        }
+
+        private void ResetApplicationStateOnError()
+        {
+            StopTimer();
+            Pb_Status.Value = 0;
+            Btn_Replicate.IsEnabled = true;
+            Btn_Stop.IsEnabled = false;
+            Pb_Status.IsIndeterminate = false;
+            Txt_Status.Text = "";
+            SetInputsUIState(true);
         }
 
         private void OnStopReplicationClick(object sender, RoutedEventArgs e)

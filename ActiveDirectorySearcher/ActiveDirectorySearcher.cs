@@ -1,7 +1,9 @@
-﻿using System.DirectoryServices;
+﻿using System.Diagnostics;
+using System.DirectoryServices;
 using System.Text;
 using System.Text.Json;
 using ActiveDirectorySearcher.DTOs;
+using Newtonsoft.Json;
 
 namespace ActiveDirectorySearcher;
 
@@ -14,9 +16,12 @@ public class ActiveDirectoryHelper
     {
         var basePath = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
         var filePath = Path.Combine(basePath ?? "", "Info", "OUReplicationTime.txt");
-        using var fstream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-        keyValuePairs = await JsonSerializer.DeserializeAsync<Dictionary<string, string>>(fstream) ?? new Dictionary<string, string>();
+        string fileJson = File.ReadAllText(filePath);
+        if (!string.IsNullOrEmpty(fileJson))
+        {
+            keyValuePairs = JsonConvert.DeserializeObject<Dictionary<string, string>>(fileJson) ?? new Dictionary<string, string>();
+        }
     }
 
     public static async Task WriteOUReplication()
@@ -87,17 +92,17 @@ public class ActiveDirectoryHelper
                 var distinguishedName = result.Properties["distinguishedName"][0] as string ?? "";
                 dnList.Add(distinguishedName);
 
-                if ((i + 1) % 20 == 0)
+                if ((i + 1) % 50 == 0)
                     ReportFetchObjects(objectType, dnList, i + 1, progress);
 
                 if ((i + 1) % 1000 == 0)
-                    await SendObjectListToWebService(inputCreds.License, objectsList, objectType, progress);
+                    await SendObjectListToWebService(inputCreds.License, objectsList, objectType, progress, cancellationToken);
             }
             if (dnList.Count > 0)
                 ReportFetchObjects(objectType, dnList, i, progress);
 
             if (objectsList.Count > 0)
-                await SendObjectListToWebService(inputCreds.License, objectsList, objectType, progress);
+                await SendObjectListToWebService(inputCreds.License, objectsList, objectType, progress, cancellationToken);
 
 
         }
@@ -118,7 +123,7 @@ public class ActiveDirectoryHelper
     }
 
     #region Private static helper methods
-    private static async Task SendObjectListToWebService(string licenseID, List<SearchResult> objectsList, ObjectType objectType, IProgress<Status>? progress)
+    private static async Task SendObjectListToWebService(string licenseID, List<SearchResult> objectsList, ObjectType objectType, IProgress<Status>? progress, CancellationToken cancellationToken)
     {
         progress?.Report(new("", SendingObjectsRequestMessage(objectsList.Count, objectType)));
 
@@ -133,7 +138,11 @@ public class ActiveDirectoryHelper
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         HttpResponseMessage response;
-        response = await client.PutAsync(apiUrl, content);
+        Stopwatch sw = new();
+        sw.Start();
+        response = await client.PutAsync(apiUrl, content, cancellationToken);
+        sw.Stop();
+        progress?.Report(new("", "Response Time Elapsed: "+ sw.Elapsed+Environment.NewLine));
         // Check the response status
         if (!response.IsSuccessStatusCode)
         {
@@ -177,7 +186,7 @@ public class ActiveDirectoryHelper
     private static async Task<string> GetSerializedObject(object obj)
     {
         using var memStream = new MemoryStream();
-        await JsonSerializer.SerializeAsync(memStream, obj);
+        await System.Text.Json.JsonSerializer.SerializeAsync(memStream, obj);
         var json = await Task.Run(() => Encoding.UTF8.GetString(memStream.GetBuffer()));
         return json;
     }
